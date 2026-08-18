@@ -1,0 +1,6 @@
+# pia_flight_watch config
+# Fill in your actual values below. Keep this file private - do not
+# commit it to git or share it publicly, it contains your secrets.
+
+AIRLABS_API_KEY=your_airlabs_key_here
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_id/your_webhook_token
