@@ -1,0 +1,64 @@
+name: PIA Flight Watch
+
+on:
+  schedule:
+    # 5 runs/day, spaced ~5 hours apart, in UTC. Adjust to taste - just
+    # keep it at 5 or fewer entries/day to respect the AirLabs quota.
+    - cron: "0 0 * * *"   # 00:00 UTC
+    - cron: "0 5 * * *"   # 05:00 UTC
+    - cron: "0 10 * * *"  # 10:00 UTC
+    - cron: "0 15 * * *"  # 15:00 UTC
+    - cron: "0 20 * * *"  # 20:00 UTC
+  workflow_dispatch: {}   # lets you manually trigger a run from the Actions tab
+
+permissions:
+  contents: write   # needed so the workflow can commit the updated state DB back
+
+concurrency:
+  group: pia-flight-watch
+  cancel-in-progress: false   # queue runs instead of cancelling, so no poll gets skipped
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run flight watch poll
+        env:
+          AIRLABS_API_KEY: ${{ secrets.AIRLABS_API_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$AIRLABS_API_KEY" ]; then
+            echo "::error::AIRLABS_API_KEY secret is empty or not set. Check Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          python3 pia_flight_watch.py
+
+      - name: Commit updated state DB
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f flight_state.db ]; then
+            git add flight_state.db
+            if ! git diff --cached --quiet; then
+              git commit -m "Update flight state DB [skip ci]"
+              # Pull any commits made by an overlapping run before pushing,
+              # so this push can't get rejected as out-of-date.
+              git pull --rebase origin main
+              git push
+            else
+              echo "No change to flight_state.db - nothing to commit."
+            fi
+          else
+            echo "flight_state.db not found - script likely exited early (check AIRLABS_API_KEY secret). Skipping commit."
+          fi
